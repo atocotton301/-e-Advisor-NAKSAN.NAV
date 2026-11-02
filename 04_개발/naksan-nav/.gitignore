@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+dist/
+build/
+.expo/
+*.log
+
+# Data (원본·개인정보는 커밋하지 않음)
+data/raw/*
+!data/raw/.gitkeep
+*.sqlite3
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
