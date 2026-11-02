@@ -1,0 +1,15 @@
+# 공개 저장소: 개인정보·비밀값은 올리지 않는다
+개인정보*
+*.env
+.env.*
+!.env.example
+
+# 개발 산출물
+node_modules/
+dist/
+*.tsbuildinfo
+__pycache__/
+
+# OS
+.DS_Store
+Thumbs.db
