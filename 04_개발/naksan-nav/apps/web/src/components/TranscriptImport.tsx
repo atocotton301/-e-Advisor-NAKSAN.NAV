@@ -252,7 +252,7 @@ export function TranscriptImport({ initialMode = "grades", matchCourse, makeSamp
       <div className="ts__notes">
         <p>
           <b>데모 안내</b> 지금은 캡처를 실제로 읽지 않고 예시 결과를 채워요. 성적은 직접 입력할 수도 있어요. 실제 버전은 팀 서버의
-          OCR이 캡처 속 표를 읽고, 과목명을 교육과정과 맞춰 이수구분을 붙여요. 이용자의 Claude 계정이나 사용량은 쓰지 않아요.
+          OCR이 캡처 속 표를 읽고, 과목명을 교육과정과 맞춰 이수구분을 붙여요.
         </p>
         <p>
           <b>앞으로의 연동 계획</b> 학교 SSO 로그인과 한성대 종합정보시스템 성적·이수내역 연동이 가능해지면 캡처 없이 로그인만으로 자동
