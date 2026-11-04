@@ -1,35 +1,39 @@
 # web
 
-React + TypeScript 웹앱. 로드맵 드래그 편집, What-if 비교 화면 중심. 담당: 조선기
+React 18 + TypeScript + Vite 웹앱. 담당: 조선기
 
 ## 실행
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm run typecheck
-npm run build
+npx tsc -b --noEmit
+npx vite build
 ```
 
-## 프론트엔드 데모 (2026-11-02)
+## 웹 데모 v2 (2026-11-04, 초안)
 
-흐름: 로그인(학번·비밀번호) → 학과·트랙 선택 → 관심사 해시태그 → 로딩("상상력 넘치는 미래를 준비하는 중") → 학기별 로드맵
+흐름: 로그인(유형 선택: 재학생·일반편입·학사편입·미래플러스·대학원·평생교육) → 학과·트랙 → 관심사 → 학기별 로드맵 → 4년 설계 점검 → AI 취업 준비 분석
 
-| 화면/기능 | 파일 |
+| 기능 | 파일 |
 | --- | --- |
-| 단계 전환 | `src/App.tsx` |
-| 학과·트랙 목록 (홈페이지 기준) | `src/data/majors.ts` |
-| 샘플 교육과정·교수·비교과 (**가상 데이터**) | `src/data/curriculum.ts` |
-| 졸업요건 계산 (19~23학번 이수현황 화면 기준) | `src/lib/requirements.ts` |
-| 관심사 기반 추천 순위 · 상위 3개 금테두리 | `src/lib/recommend.ts` |
-| 수업계획서 (형식만 채운 예시) | `src/lib/syllabus.ts`, `src/components/SyllabusView.tsx` |
-| 교수 논문 AI 요약 (목업, 백엔드 연동 자리) | `src/lib/ai.ts`, `src/components/ProfessorView.tsx` |
-| 지니 효과 패널 | `src/components/Genie.tsx` |
-| 한성부기 픽셀아트 (mood: happy/normal/sad) | `src/components/Boogi.tsx` |
-| 타임라인·학기 확정 애니메이션 | `src/components/Roadmap.tsx` |
+| 학번별 졸업요건 · 편입생 요건 | `src/lib/requirements.ts` |
+| 학기별 수강 가능 학점 (18/21, 학점이월, 성적우수, 학사경고) | `src/lib/creditLimit.ts` |
+| 비교과 200pt 인정·이월·소멸 | `src/lib/extracurricular.ts` |
+| 2026-2 공식 교육과정 (115개 학과·트랙) | `src/data/cur2026_2.ts` |
+| 2026-2 수강신청책자 분반·교수·시간 | `src/data/hansung.ts` |
+| 트랙(학과)별 졸업요건 38곳 | `src/data/trackGrad.ts` |
+| 전화번호·위치 (부서·학과·교수 연구실) | `src/data/directory.ts`, `organization.ts`, `professors.ts`, `profRooms.ts` |
+| 휴학·졸업 시기·증명서 기준 | `src/lib/leave.ts`, `src/components/GraduationPlan.tsx` |
+| 학업 분석 (성적·관심·진행도 트랙 적합도) | `src/lib/analysis.ts` |
+| AI 취업 준비 분석 (규칙 기반, 직무 19종) | `src/lib/career.ts`, `src/components/CareerReport.tsx` |
+| 로드맵 버전 저장·비교 | `src/components/RoadmapVersions.tsx` |
+| 내 페이지 대시보드 | `src/components/MyPage.tsx` |
+| 시간표 교시→시각 환산 | `src/lib/timetable.ts` |
+| 상상부기 캐릭터 (ⓒ 한성대학교, 사용 허락) | `src/components/Boogi.tsx`, `src/assets/boogi/` |
 
-### 실제 데이터로 바꿀 곳
-- `loadCatalog()` → backend `/api/catalog` (수강신청책자·교육과정표 기반 DB)
-- `briefProfessor()` → backend 가 KCI·RISS 논문 메타데이터 + LLM 요약. API 키는 서버에만 둔다.
-- `requirementVersion()` → backend CHECK 엔진의 학번별 요건 버전
-- 부기 표정은 지금 졸업요건 충족 개수로 정한다. 성적(GPA) 연동 시 `Boogi` 의 `mood` 만 바꾸면 된다.
+### 아직 샘플·예정인 부분
+- 1학기 교육과정·분반: 2026-1 교육과정조회·수강신청책자 받으면 교체
+- 성적표 캡처 OCR: 데모는 예시 결과. 실제는 팀 서버 OCR → 이후 종합정보시스템 연동(학교 협의)
+- AI 취업 분석: 지금은 규칙 기반. 실제는 서버에서 채용공고·NCS와 비교 (API 키는 서버에만)
+- 대학원·평생교육 로드맵, 동일교과목 조회

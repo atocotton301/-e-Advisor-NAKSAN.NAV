@@ -1,4 +1,6 @@
-import type { Activity, Catalog, Category, Course, Family, Paper, Professor, Student } from "../types";
+import { CUR_2026_2 } from "./cur2026_2";
+import type { Activity, Catalog, Category, Course, Family, Paper, Professor, Student, TrackRef } from "../types";
+import { AI_CURRICULUM, BOOK_2026_2, normName, tagsFor, type RealSection } from "./hansung";
 
 // ⚠ 데모용 샘플 데이터. 과목·교수·논문은 모두 가상이며, 실제 교육과정은 수강신청책자·교육과정표 기반 DB로 교체한다.
 
@@ -23,21 +25,28 @@ const FAMILIES: Record<Family, FamilySpec> = {
       ["보상 설계가 학습 안정성에 미치는 영향 분석", "NeurIPS Workshop", 2023, "AI에게 '잘했다'는 점수를 어떻게 주느냐에 따라 학습이 흔들리는 정도가 달라진다는 걸 실험으로 보였어요."],
     ],
     courses: `
-1 기초 인공지능수학 | 인공지능 데이터분석
-1 필수 파이썬프로그래밍 | 인공지능 웹개발 데이터분석
-1 선택 컴퓨팅사고와문제해결 | 게임 교육
-1 선택 선형대수 | 인공지능 금융투자
-2 필수 자료구조 | 웹개발 앱개발
-2 필수 머신러닝 | 인공지능 데이터분석
-2 선택 확률과통계 | 데이터분석 금융투자
-2 선택 데이터베이스 | 데이터분석 웹개발 클라우드
-3 필수 딥러닝 | 인공지능
-3 선택 자연어처리 | 인공지능 언어 글쓰기
-3 선택 컴퓨터비전 | 인공지능 로봇 영상
-3 선택 생성형AI응용 | 인공지능 디자인 영상 창업
-4 필수 AI캡스톤디자인 | 인공지능 창업
-4 선택 MLOps와클라우드 | 클라우드 인공지능
-4 선택 AI윤리와사회 | 철학 법 공공정책`,
+1-1 기초 인공지능수학 | 인공지능 데이터분석
+1-1 필수 파이썬프로그래밍 | 인공지능 웹개발 데이터분석
+1-1 선택 컴퓨팅사고와문제해결 | 게임 교육
+1-2 선택 선형대수 | 인공지능 금융투자
+1-2 선택 데이터과학입문 | 데이터분석 인공지능
+1-2 선택 AI프로그래밍실습 | 인공지능 앱개발
+2-1 필수 자료구조 | 웹개발 앱개발
+2-1 선택 확률과통계 | 데이터분석 금융투자
+2-1 선택 데이터베이스 | 데이터분석 웹개발 클라우드
+2-2 필수 머신러닝 | 인공지능 데이터분석
+2-2 선택 알고리즘 | 인공지능 게임
+2-2 선택 웹프로그래밍 | 웹개발 앱개발
+3-1 필수 딥러닝 | 인공지능
+3-1 선택 자연어처리 | 인공지능 언어 글쓰기
+3-1 선택 데이터시각화 | 데이터분석 디자인
+3-2 선택 컴퓨터비전 | 인공지능 로봇 영상
+3-2 선택 생성형AI응용 | 인공지능 디자인 영상 창업
+3-2 선택 추천시스템 | 인공지능 데이터분석 마케팅
+4-1 필수 AI캡스톤디자인 | 인공지능 창업
+4-1 선택 MLOps와클라우드 | 클라우드 인공지능
+4-2 선택 AI윤리와사회 | 철학 법 공공정책
+4-2 선택 AI서비스기획 | 창업 인공지능 마케팅`,
   },
   cs: {
     dept: "컴퓨터공학 계열",
@@ -422,18 +431,26 @@ const FAMILIES: Record<Family, FamilySpec> = {
 const MAJOR_CATEGORY: Record<string, Category> = { 기초: "전공기초", 필수: "전공필수", 선택: "전공선택" };
 
 function parseCourseLines(spec: FamilySpec, family: Family, slot: 1 | 2): Course[] {
+  const seenPerGrade = new Map<number, number>();
   return spec.courses
     .trim()
     .split("\n")
     .map((line, i) => {
       const [head = "", tagPart = ""] = line.split("|");
-      const [grade = "1", kind = "선택", ...nameParts] = head.trim().split(/\s+/);
+      const [when = "1", kind = "선택", ...nameParts] = head.trim().split(/\s+/);
+      const [gradeStr = "1", termStr] = when.split("-");
+      const grade = Number(gradeStr);
+      // 학기 표기("2-1")가 없는 계열은 학년 안에서 순서대로 1학기·2학기에 번갈아 연다(데모 단순화).
+      const nth = seenPerGrade.get(grade) ?? 0;
+      seenPerGrade.set(grade, nth + 1);
+      const term = (termStr ? Number(termStr) : (nth % 2) + 1) as 1 | 2;
       return {
         id: `${family}-${slot}-${i}`,
         name: nameParts.join(" "),
         category: MAJOR_CATEGORY[kind] ?? "전공선택",
         credits: 3,
-        grade: Number(grade),
+        grade,
+        term,
         tags: tagPart.trim().split(/\s+/).filter(Boolean),
         professorId: `${family}-p${i % 4}`,
         trackSlot: slot,
@@ -490,13 +507,13 @@ const LIBERAL_PROFS: Professor[] = [
   },
 ];
 
-const LIBERAL_COURSES: Course[] = [
-  { id: "lib-th1", name: "사고와표현(읽기와 쓰기)", category: "필수교양", credits: 2, grade: 0, tags: ["글쓰기", "철학"], professorId: "lib-p0", group: "사고와표현" },
-  { id: "lib-th2", name: "사고와표현(발표와 토론)", category: "필수교양", credits: 2, grade: 0, tags: ["글쓰기", "공공정책"], professorId: "lib-p0", group: "사고와표현" },
-  { id: "lib-cd1", name: "문제해결을 위한 코딩 첫걸음", category: "필수교양", credits: 2, grade: 0, tags: ["웹개발", "인공지능"], professorId: "lib-p2", group: "코딩" },
-  { id: "lib-cd2", name: "AI와 SW기초", category: "필수교양", credits: 2, grade: 0, tags: ["인공지능"], professorId: "lib-p2", group: "코딩" },
-  { id: "lib-en1", name: "영어커뮤니케이션 독해/작문", category: "필수교양", credits: 2, grade: 0, tags: ["영어", "글쓰기"], professorId: "lib-p1", group: "영어독해작문" },
-  { id: "lib-en2", name: "영어커뮤니케이션 청취/회화", category: "필수교양", credits: 2, grade: 0, tags: ["영어", "글로벌"], professorId: "lib-p1", group: "영어청취회화" },
+const LIBERAL_COURSES_19_23: Course[] = [
+  { id: "lib-th1", name: "사고와표현(읽기와 쓰기)", category: "필수교양", credits: 2, grade: 1, term: 1, tags: ["글쓰기", "철학"], professorId: "lib-p0", group: "사고와표현" },
+  { id: "lib-th2", name: "사고와표현(발표와 토론)", category: "필수교양", credits: 2, grade: 1, term: 2, tags: ["글쓰기", "공공정책"], professorId: "lib-p0", group: "사고와표현" },
+  { id: "lib-cd1", name: "문제해결을 위한 코딩 첫걸음", category: "필수교양", credits: 2, grade: 1, term: 1, tags: ["웹개발", "인공지능"], professorId: "lib-p2", group: "코딩" },
+  { id: "lib-cd2", name: "AI와 SW기초", category: "필수교양", credits: 2, grade: 1, term: 2, tags: ["인공지능"], professorId: "lib-p2", group: "코딩" },
+  { id: "lib-en1", name: "영어커뮤니케이션 독해/작문", category: "필수교양", credits: 2, grade: 1, term: 1, tags: ["영어", "글쓰기"], professorId: "lib-p1", group: "영어독해작문" },
+  { id: "lib-en2", name: "영어커뮤니케이션 청취/회화", category: "필수교양", credits: 2, grade: 1, term: 2, tags: ["영어", "글로벌"], professorId: "lib-p1", group: "영어청취회화" },
   { id: "lib-ar1", name: "음악과 삶", category: "선택필수교양", credits: 2, grade: 0, tags: ["공연예술"], professorId: "lib-p0", group: "예술과 스포츠" },
   { id: "lib-ar2", name: "생활체육과 건강", category: "선택필수교양", credits: 2, grade: 0, tags: ["스포츠"], professorId: "lib-p1", group: "예술과 스포츠" },
   { id: "lib-hu1", name: "철학적 사유와 질문", category: "선택필수교양", credits: 2, grade: 0, tags: ["철학"], professorId: "lib-p0", group: "인문학적 상상력" },
@@ -519,6 +536,15 @@ const LIBERAL_COURSES: Course[] = [
   { id: "gen-10", name: "메타버스와 미래사회", category: "일반선택", credits: 3, grade: 0, tags: ["메타버스", "게임"], professorId: "lib-p2" },
 ];
 
+/** 필수교양 권장 학기(1-1 / 1-2)는 기본값이다. 실제로는 학과마다 1·2학기 배정이 달라 학업이수가이드로 맞춘다. */
+/** 24학번 이후 교양필수: 사고와 표현 3, 영어 2+2, AI와 SW기초 3, 한성 이마기난스 3 (2026 학업이수가이드) */
+const LIBERAL_COURSES_24: Course[] = [
+  { id: "lib24-th", name: "사고와 표현", category: "필수교양", credits: 3, grade: 1, term: 1, tags: ["글쓰기", "철학"], professorId: "lib-p0", group: "사고와표현" },
+  { id: "lib24-ai", name: "AI와 SW기초", category: "필수교양", credits: 3, grade: 1, term: 1, tags: ["인공지능", "웹개발"], professorId: "lib-p2", group: "코딩" },
+  { id: "lib24-im", name: "한성 이마기난스", category: "필수교양", credits: 3, grade: 1, term: 2, tags: ["창업", "교육"], professorId: "lib-p1", group: "이마기난스" },
+  ...LIBERAL_COURSES_19_23.filter((c) => c.category !== "필수교양" || c.group === "영어독해작문" || c.group === "영어청취회화"),
+];
+
 /** 매 학기 신청 가능한 비교과 (가상) */
 export const ACTIVITIES: Activity[] = [
   { id: "ex-1", name: "상상력 진로캠프", host: "학생성공·전공설계센터", points: 40, tags: ["교육", "심리"] },
@@ -538,26 +564,127 @@ export const ACTIVITIES: Activity[] = [
 ];
 
 /** 학교 DB 조회를 흉내 낸다. 실제 구현은 backend /api/catalog 로 교체. */
-export function loadCatalog(student: Pick<Student, "track1" | "track2">): Promise<Catalog> {
+export function loadCatalog(student: Pick<Student, "track1" | "track2" | "entryYear">): Promise<Catalog> {
   return new Promise((resolve) => setTimeout(() => resolve(buildCatalog(student)), 2600));
 }
 
-export function buildCatalog(student: Pick<Student, "track1" | "track2">): Catalog {
+const realProfId = (sections?: RealSection[]) => {
+  const name = sections?.[0]?.prof.split(/\s+/)[0] ?? "";
+  return name && name !== "강사" && name !== "미정" ? `real:${name}` : "";
+};
+
+/**
+ * 트랙 전공 과목. AI응용학과는 학과 공식 교육과정, 2026-2 책자에 있는 트랙은
+ * 2학기 실제 개설 과목을 쓰고, 아직 자료가 없는 1학기는 샘플로 채운다.
+ */
+export function majorCourses(ref: TrackRef, slot: 1 | 2): Course[] {
+  const name = ref.track.name;
+  const fam = ref.track.family;
+  const sample = parseCourseLines(FAMILIES[fam], fam, slot).map((c) => ({ ...c, source: "sample" as const }));
+  const book = BOOK_2026_2[name] ?? [];
+  const bookByName = new Map(book.map((b) => [normName(b.name), b]));
+
+  if (name === "AI응용학과") {
+    return AI_CURRICULUM.map((r, i) => {
+      const b = r.term !== 1 ? bookByName.get(normName(r.name)) : undefined;
+      return {
+        id: `ai-${slot}-${i}`,
+        name: r.name,
+        category: r.category,
+        credits: b?.credits ?? 3,
+        grade: r.grade,
+        term: r.term === 0 ? undefined : r.term,
+        tags: tagsFor(r.name),
+        professorId: realProfId(b?.sections),
+        trackSlot: slot,
+        source: "official" as const,
+        code: b?.code,
+        sections: b?.sections,
+      };
+    });
+  }
+  // 2026-2 교육과정조회(공식) — 2학기 전공은 이걸 기준으로, 분반·시간은 책자에서 붙인다.
+  const cur = CUR_2026_2[name];
+  if (cur?.length) {
+    const official: Course[] = cur.map(([code, cname, g, category, credits], i) => {
+      const b = bookByName.get(normName(cname));
+      return {
+        id: `cur-${slot}-${normName(name)}-${i}`,
+        name: cname,
+        category,
+        credits,
+        // 학년 구분 없는 과목(0)은 3학년 선택으로 둔다
+        grade: g || 3,
+        term: 2,
+        tags: tagsFor(cname),
+        professorId: realProfId(b?.sections),
+        trackSlot: slot,
+        source: "official" as const,
+        code,
+        sections: b?.sections,
+      };
+    });
+    return [...sample.filter((c) => c.term === 1), ...official];
+  }
+  if (!book.length) return sample;
+  const real: Course[] = book.map((b, i) => ({
+    id: `book-${slot}-${normName(name)}-${i}`,
+    name: b.name,
+    category: b.category,
+    credits: b.credits,
+    grade: b.grade,
+    term: 2,
+    tags: tagsFor(b.name),
+    professorId: realProfId(b.sections),
+    trackSlot: slot,
+    source: "book",
+    code: b.code,
+    sections: b.sections,
+  }));
+  return [...sample.filter((c) => c.term === 1), ...real];
+}
+
+export const profIdOf = (prof: string) => {
+  const n = prof.split(/\s+/)[0] ?? "";
+  return n && n !== "강사" && n !== "미정" ? `real:${n}` : "";
+};
+
+function realProfessors(courses: Course[], dept: (c: Course) => string): Professor[] {
+  const out = new Map<string, Professor>();
+  // 분반이 여러 개면 분반마다 다른 교수를 모두 등록한다.
+  for (const c of courses) {
+    const names = new Set<string>();
+    if (c.professorId.startsWith("real:")) names.add(c.professorId.slice(5));
+    for (const sec of c.sections ?? []) {
+      const n = sec.prof.split(/\s+/)[0] ?? "";
+      if (n && n !== "강사" && n !== "미정") names.add(n);
+    }
+    for (const n of names) {
+      const id = `real:${n}`;
+      if (!out.has(id)) out.set(id, { id, name: n, dept: dept(c), focus: "", papers: [], real: true });
+    }
+  }
+  return [...out.values()];
+}
+
+export function buildCatalog(student: Pick<Student, "track1" | "track2" | "entryYear">): Catalog {
   const fam1 = student.track1.track.family;
-  const courses: Course[] = [...parseCourseLines(FAMILIES[fam1], fam1, 1)];
+  const courses: Course[] = [...majorCourses(student.track1, 1)];
   const families = new Set<Family>([fam1]);
 
   if (student.track2) {
     const fam2 = student.track2.track.family;
-    const taken = new Set(courses.map((c) => c.name));
-    // 같은 계열 트랙끼리는 공통 과목을 제1트랙 쪽으로만 인정한다(데모 단순화).
-    courses.push(...parseCourseLines(FAMILIES[fam2], fam2, 2).filter((c) => !taken.has(c.name)));
+    const taken = new Set(courses.map((c) => normName(c.name)));
+    // 같은 과목명은 제1트랙 쪽으로만 인정한다(데모 단순화).
+    courses.push(...majorCourses(student.track2, 2).filter((c) => !taken.has(normName(c.name))));
     families.add(fam2);
   }
-  courses.push(...LIBERAL_COURSES);
+  courses.push(...(student.entryYear % 100 >= 24 ? LIBERAL_COURSES_24 : LIBERAL_COURSES_19_23));
 
   const professors: Record<string, Professor> = {};
   for (const p of [...[...families].flatMap(familyProfessors), ...LIBERAL_PROFS]) professors[p.id] = p;
+  const deptOf = (c: Course) => (c.trackSlot === 2 ? student.track2?.track.name : student.track1.track.name) ?? "";
+  for (const p of realProfessors(courses, deptOf)) professors[p.id] = p;
 
   return { courses, activities: ACTIVITIES, professors };
 }

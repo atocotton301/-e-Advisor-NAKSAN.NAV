@@ -56,6 +56,13 @@ export interface Course {
   credits: number;
   /** 권장 학년. 교양·일반선택은 0(전 학년) */
   grade: number;
+  /** 개설 학기. 없으면 매 학기 개설(교양·일반선택) */
+  term?: 1 | 2;
+  /** official: 학과 공식 교육과정 · book: 수강신청책자 개설 과목 · sample: 데모 샘플 */
+  source?: "official" | "book" | "sample" | "transcript";
+  code?: string;
+  /** 2026-2 수강신청책자의 분반별 교수·시간·강의실 */
+  sections?: { sec: string; prof: string; time: string; room: string }[];
   tags: string[];
   professorId: string;
   /** 전공 과목이 몇 번째 트랙 소속인지 */
@@ -80,6 +87,8 @@ export interface Paper {
 }
 
 export interface Professor {
+  /** 책자에 나온 실제 교수. 논문·연구 정보는 아직 연동 전이라 비워 둔다. */
+  real?: boolean;
   id: string;
   name: string;
   dept: string;
@@ -93,7 +102,16 @@ export interface Catalog {
   professors: Record<string, Professor>;
 }
 
+export type AdmissionKind = "신입학" | "일반편입" | "학사편입" | "미래플러스" | "대학원" | "평생교육";
+
+export interface Admission {
+  kind: AdmissionKind;
+  /** 일반편입 학년 (2 또는 3) */
+  transferGrade?: 2 | 3;
+}
+
 export interface Student {
+  admission?: Admission;
   studentId: string;
   entryYear: number;
   track1: TrackRef;

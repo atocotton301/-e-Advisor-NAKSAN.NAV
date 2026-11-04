@@ -6,9 +6,12 @@ import { MajorPicker } from "./components/MajorPicker";
 import { Roadmap } from "./components/Roadmap";
 import { Scenery } from "./components/Scenery";
 import { buildCatalog, loadCatalog } from "./data/curriculum";
-import type { Catalog, Student, TrackRef } from "./types";
+import { applyRequirementVersion, entryYearOf } from "./lib/requirements";
+import type { Admission, Catalog, Student, TrackRef } from "./types";
+import { AdmissionInfo } from "./components/AdmissionInfo";
+import { COLLEGES } from "./data/majors";
 
-type Stage = "login" | "major" | "interest" | "loading" | "roadmap";
+type Stage = "login" | "major" | "interest" | "loading" | "roadmap" | "info";
 
 const STAGE_SWAP_MS = 320;
 
@@ -16,6 +19,7 @@ export function App() {
   const [stage, setStage] = useState<Stage>("login");
   const [leaving, setLeaving] = useState(false);
   const [studentId, setStudentId] = useState("");
+  const [admission, setAdmission] = useState<Admission>({ kind: "신입학" });
   const [track1, setTrack1] = useState<TrackRef | null>(null);
   const [track2, setTrack2] = useState<TrackRef | undefined>();
   const [interests, setInterests] = useState<string[]>([]);
@@ -32,7 +36,7 @@ export function App() {
   useEffect(() => {
     if (stage !== "loading" || !track1) return;
     let alive = true;
-    loadCatalog({ track1, track2 }).then((c) => {
+    loadCatalog({ track1, track2, entryYear: entryYearOf(studentId) }).then((c) => {
       if (!alive) return;
       setCatalog(c);
       go("roadmap");
@@ -40,7 +44,7 @@ export function App() {
     return () => {
       alive = false;
     };
-  }, [stage, track1, track2, go]);
+  }, [stage, track1, track2, studentId, go]);
 
   const reset = () => {
     setTrack1(null);
@@ -53,11 +57,11 @@ export function App() {
   const changeTrack2 = (ref: TrackRef | undefined) => {
     if (!track1) return;
     setTrack2(ref);
-    setCatalog(buildCatalog({ track1, track2: ref }));
+    setCatalog(buildCatalog({ track1, track2: ref, entryYear: entryYearOf(studentId) }));
   };
 
   const student: Student | null = track1
-    ? { studentId, entryYear: 2000 + Number(studentId.slice(0, 2)), track1, track2, interests }
+    ? { studentId, entryYear: entryYearOf(studentId), track1, track2, interests, admission }
     : null;
 
   return (
@@ -68,11 +72,16 @@ export function App() {
         <Roadmap student={student} catalog={catalog} onReset={reset} onChangeTrack2={changeTrack2} />
       ) : (
         <main key={stage} className={`stage ${leaving ? "is-leaving" : ""}`}>
+          {stage === "info" && <AdmissionInfo kind={admission.kind} onBack={() => go("login")} />}
           {stage === "login" && (
             <Login
-              onSubmit={(id) => {
+              initialId={studentId}
+              initialAdmission={admission}
+              onSubmit={(id, adm) => {
                 setStudentId(id);
-                go("major");
+                setAdmission(adm);
+                applyRequirementVersion(entryYearOf(id), adm);
+                go(adm.kind === "대학원" || adm.kind === "평생교육" ? "info" : "major");
               }}
             />
           )}
@@ -81,7 +90,17 @@ export function App() {
               title="입학한 학과·트랙을 골라주세요"
               subtitle={`${studentId.slice(0, 2)}학번 · 제1트랙(또는 학과)으로 로드맵을 시작해요.`}
               confirmLabel="다음"
-              initial={track1}
+              initial={
+                track1 ??
+                (admission.kind === "미래플러스"
+                  ? (() => {
+                      const c = COLLEGES.find((x) => x.name === "미래플러스대학");
+                      const u = c?.units[0];
+                      return c && u ? { college: c.name, unit: u.name, track: u.tracks[0]! } : null;
+                    })()
+                  : null)
+              }
+              onBack={() => go("login")}
               onConfirm={(ref) => {
                 setTrack1(ref);
                 go("interest");

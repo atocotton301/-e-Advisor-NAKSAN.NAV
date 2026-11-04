@@ -11,6 +11,8 @@ interface MajorPickerProps {
   excludeId?: string;
   onConfirm: (ref: TrackRef) => void;
   onSkip?: () => void;
+  /** 이전 단계(로그인)로 돌아가기 */
+  onBack?: () => void;
 }
 
 interface Section {
@@ -44,7 +46,7 @@ function buildSections(collegeIdx: number, query: string): Section[] {
   return sections;
 }
 
-export function MajorPicker({ title, subtitle, confirmLabel, initial, excludeId, onConfirm, onSkip }: MajorPickerProps) {
+export function MajorPicker({ title, subtitle, confirmLabel, initial, excludeId, onConfirm, onSkip, onBack }: MajorPickerProps) {
   const [collegeIdx, setCollegeIdx] = useState(() =>
     Math.max(0, COLLEGES.findIndex((c) => c.name === initial?.college)),
   );
@@ -132,6 +134,11 @@ export function MajorPicker({ title, subtitle, confirmLabel, initial, excludeId,
           <p className="picked-summary picked-summary--empty">아직 선택하지 않았어요</p>
         )}
         <div className="card__actions">
+          {onBack && (
+            <button type="button" className="btn btn--ghost" onClick={onBack}>
+              ← 학번 다시 입력
+            </button>
+          )}
           {onSkip && (
             <button type="button" className="btn btn--ghost" onClick={onSkip}>
               {initial ? "제2트랙 빼기" : "나중에"}
