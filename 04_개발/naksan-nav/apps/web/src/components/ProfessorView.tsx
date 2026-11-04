@@ -14,6 +14,34 @@ function useTypewriter(text: string, cps = 60) {
 }
 
 export function ProfessorView({ professor }: { professor: Professor }) {
+  if (professor.real) return <RealProfessor professor={professor} />;
+  return <SampleProfessor professor={professor} />;
+}
+
+/** 책자에 나온 실제 교수님. 연구 정보를 지어내지 않고, 연동 예정이라고만 알린다. */
+function RealProfessor({ professor }: { professor: Professor }) {
+  return (
+    <article className="prof">
+      <header className="prof__head">
+        <span className="prof__avatar" aria-hidden>
+          {professor.name.slice(0, 1)}
+        </span>
+        <div>
+          <span className="eyebrow">{professor.dept}</span>
+          <h2>{professor.name} 교수</h2>
+        </div>
+      </header>
+      <section className="prof__ai">
+        <span className="ai-badge">연동 예정</span>
+        <p className="prof__headline">
+          교수님의 최근 논문 요약은 KCI·RISS 논문 정보와 연동한 뒤 제공돼요. 지금은 담당 과목과 분반 정보만 보여드려요.
+        </p>
+      </section>
+    </article>
+  );
+}
+
+function SampleProfessor({ professor }: { professor: Professor }) {
   const [brief, setBrief] = useState<ProfessorBrief | null>(null);
 
   useEffect(() => {

@@ -1,4 +1,7 @@
+import { gradMet, RULE_LABEL, TRACK_GRAD } from "../data/trackGrad";
+import { AREA_KEY } from "../lib/areas";
 import type { MouseEvent } from "react";
+import { EXTRA_RULE, type ExtraRow } from "../lib/extracurricular";
 import { isMet, REQ, type Progress, type RequirementStatus, type TrackProgress } from "../lib/requirements";
 
 interface RequirementsPanelProps {
@@ -6,7 +9,55 @@ interface RequirementsPanelProps {
   version: string;
   track1: string;
   track2?: string;
+  semesterLabel: string;
+  extra: ExtraRow;
   onPickTrack2: (origin: DOMRect) => void;
+  /** 트랙(학과) 졸업요건 체크 상태 */
+  gradChecks: Record<string, boolean[]>;
+  onToggleGrad: (track: string, i: number) => void;
+}
+
+function TrackGradBox({ name, checks, onToggle }: { name: string; checks: boolean[]; onToggle: (i: number) => void }) {
+  const g = TRACK_GRAD[name];
+  if (!g) {
+    return (
+      <div className="tg">
+        <div className="tg__head">
+          <b>{name}</b>
+          <span className="tg__rule">조사 중</span>
+        </div>
+        <p className="tg__note">학과 졸업요건을 아직 모으지 못했어요. 학과 사무실에 확인해 주세요.</p>
+      </div>
+    );
+  }
+  const met = gradMet(g, checks);
+  return (
+    <div className={`tg ${met ? "is-met" : ""}`}>
+      <div className="tg__head">
+        <b>{name}</b>
+        <span className="tg__rule">{RULE_LABEL(g)}</span>
+        {met !== null && <span className={`tg__state ${met ? "ok" : ""}`}>{met ? "충족" : "미충족"}</span>}
+      </div>
+      <ul>
+        {g.items.map((it, i) => (
+          <li key={it}>
+            {g.rule === "info" ? (
+              <span className="tg__info">· {it}</span>
+            ) : (
+              <label>
+                <input type="checkbox" checked={!!checks[i]} onChange={() => onToggle(i)} />
+                <span>{it}</span>
+              </label>
+            )}
+          </li>
+        ))}
+      </ul>
+      {g.note && <p className="tg__note">{g.note}</p>}
+      <a className="tg__link" href={g.url} target="_blank" rel="noreferrer">
+        학과 원문 보기 ↗
+      </a>
+    </div>
+  );
 }
 
 /** 값이 바뀔 때마다 key 로 다시 그려 통 튀는 애니메이션을 준다. */
@@ -44,7 +95,7 @@ function TrackRow({ name, t }: { name: string; t: TrackProgress }) {
   );
 }
 
-export function RequirementsPanel({ status, version, track1, track2, onPickTrack2 }: RequirementsPanelProps) {
+export function RequirementsPanel({ status, version, track1, track2, semesterLabel, extra, onPickTrack2, gradChecks, onToggleGrad }: RequirementsPanelProps) {
   const pickTrack2 = (e: MouseEvent<HTMLButtonElement>) => onPickTrack2(e.currentTarget.getBoundingClientRect());
 
   return (
@@ -62,10 +113,44 @@ export function RequirementsPanel({ status, version, track1, track2, onPickTrack
         </div>
         <div className="big-stat">
           <span>비교과 포인트</span>
-          <Num p={status.extraPoints} unit="pt" />
-          <Bar p={status.extraPoints} />
+          {REQ.extraPoints > 0 ? (
+            <>
+              <Num p={status.extraPoints} unit="pt" />
+              <Bar p={status.extraPoints} />
+            </>
+          ) : (
+            <span className="num">해당 없음</span>
+          )}
         </div>
       </div>
+
+      <section className="reqs__sec reqs__extra">
+        <h3>
+          {semesterLabel} 비교과 인정 <span className="num"><b>{extra.recognized}</b>/{EXTRA_RULE.perSemester}pt</span>
+        </h3>
+        <dl className="extra-row">
+          <div>
+            <dt>획득</dt>
+            <dd>{extra.earned}pt</dd>
+          </div>
+          <div>
+            <dt>이월받음</dt>
+            <dd>{extra.carryIn}pt</dd>
+          </div>
+          <div>
+            <dt>이월</dt>
+            <dd className={extra.carryOut ? "is-carry" : ""}>{extra.carryOut}pt</dd>
+          </div>
+          <div>
+            <dt>소멸</dt>
+            <dd className={extra.lost ? "is-lost" : ""}>{extra.lost}pt</dd>
+          </div>
+        </dl>
+        <p className="reqs__rule">
+          한 학기 {EXTRA_RULE.perSemester}pt까지 인정 · {EXTRA_RULE.perSemester + 1}~{EXTRA_RULE.carryLimit}pt는 차액을 다음 학기로 이월 ·{" "}
+          {EXTRA_RULE.carryLimit}pt 초과분은 소멸
+        </p>
+      </section>
 
       <section className="reqs__sec">
         <h3>
@@ -87,7 +172,7 @@ export function RequirementsPanel({ status, version, track1, track2, onPickTrack
         </h3>
         <div className="areas">
           {status.areas.map((a) => (
-            <span key={a.name} className={`area ${a.credits > 0 ? "is-on" : ""}`}>
+            <span key={a.name} className={`area ${a.credits > 0 ? `is-on achip--${AREA_KEY[a.name] ?? "etc"}` : ""}`}>
               {a.name}
               <b>{a.credits}</b>
             </span>
@@ -134,6 +219,15 @@ export function RequirementsPanel({ status, version, track1, track2, onPickTrack
         )}
       </section>
 
+      <section className="reqs__sec">
+        <h3>트랙(학과) 졸업요건</h3>
+        <p className="tg__lead">학점 외에 학과가 따로 정한 졸업 인증이에요. 채운 항목에 체크해 두세요.</p>
+        {[track1, ...(track2 ? [track2] : [])].map((t) => (
+          <TrackGradBox key={t} name={t} checks={gradChecks[t] ?? []} onToggle={(i) => onToggleGrad(t, i)} />
+        ))}
+      </section>
+
+      {REQ.note && <p className="reqs__warn">{REQ.note}</p>}
       <p className="reqs__note">
         * 참고용 시뮬레이션이에요. 졸업 학기에는 종합정보시스템 졸업(가)사정 결과로 꼭 확인하세요.
       </p>
