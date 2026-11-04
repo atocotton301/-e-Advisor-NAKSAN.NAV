@@ -248,7 +248,7 @@ export function CareerReport({ student, semesters, catalogCourses, catalogActivi
 
       <p className="cr__note">
         지금 분석은 과목·비교과에 붙은 역량 태그를 직무별 핵심 역량과 비교하는 규칙 기반 계산이에요. 실제 서비스에서는 팀 서버의 AI가 채용공고와
-        직무기술서(NCS)를 함께 읽어 더 정확하게 비교할 예정이에요. 이 화면은 이용자의 Claude 계정이나 사용량을 쓰지 않아요.
+        직무기술서(NCS)를 함께 읽어 더 정확하게 비교할 예정이에요.
       </p>
     </div>
   );
