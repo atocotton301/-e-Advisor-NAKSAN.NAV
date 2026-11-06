@@ -1,0 +1,17 @@
+{
+  "name": "NAKSAN.NAV · 한성대 진로로드맵",
+  "short_name": "NAKSAN.NAV",
+  "description": "학업 데이터로 전공트랙을 추천하고 졸업까지 학기별 로드맵을 설계하는 한성대 진로로드맵 앱",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#eaf2fd",
+  "theme_color": "#17355f",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
