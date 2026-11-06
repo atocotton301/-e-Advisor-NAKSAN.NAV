@@ -17,3 +17,7 @@ Thumbs.db
 # 개인정보가 들어간 기획서·문서는 올리지 않음
 01_기획서/*.docx
 01_기획서/*.pdf
+
+# 앱 빌드 산출물 (CI에서 생성)
+04_개발/naksan-nav/apps/web/android/
+*.apk
