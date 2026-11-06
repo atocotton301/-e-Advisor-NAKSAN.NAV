@@ -6,6 +6,10 @@ on:
     paths:
       - "04_개발/naksan-nav/apps/web/**"
       - ".github/workflows/android-apk.yml"
+  pull_request:
+    paths:
+      - "04_개발/naksan-nav/apps/web/**"
+      - ".github/workflows/android-apk.yml"
   workflow_dispatch:
 
 permissions:
