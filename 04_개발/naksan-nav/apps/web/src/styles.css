@@ -3576,3 +3576,62 @@ textarea {
   .mp__cats { grid-template-columns: repeat(3, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { .ring__fg, .mbar__track span { transition: none; } }
+
+/* ===== 여러 기기 대응 (폰·태블릿·노트북) ===== */
+/* 노치·홈 바 영역 피하기 (아이폰·홈 화면 앱) */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  -webkit-tap-highlight-color: transparent;
+}
+.topbar { padding-top: max(12px, env(safe-area-inset-top)); }
+button, a, input, select { touch-action: manipulation; }
+
+/* 태블릿·좁은 노트북: 버튼 줄을 한 줄로 두고 옆으로 밀어 보기 */
+@media (max-width: 1180px) {
+  .topbar { flex-wrap: wrap; row-gap: 8px; }
+  .topbar__who { flex: 1 1 auto; }
+  .topbar__actions {
+    order: 3;
+    flex: 1 0 100%;
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: 8px;
+    padding: 2px 2px 4px;
+    -webkit-overflow-scrolling: touch;
+    mask-image: linear-gradient(90deg, #000 92%, transparent);
+  }
+  .topbar__actions::-webkit-scrollbar { display: none; }
+  .topbar__actions > * { flex: none; white-space: nowrap; }
+  .topbar__actions { justify-content: flex-start; }
+}
+
+/* 폰: 상단을 낮게, 관심사 태그 숨김, 버튼 작게 */
+@media (max-width: 720px) {
+  .topbar { gap: 8px; padding-left: 16px; padding-right: 16px; margin: 0 -16px 6px; }
+  .topbar__brand b { font-size: 17px; }
+  .topbar__brand span { display: none; }
+  .topbar__tags { display: none; }
+  .topbar__who .chip { font-size: 12px; padding: 4px 9px; }
+  .topbar__actions .btn--sm, .topbar__actions .chip { font-size: 13px; padding: 7px 12px; }
+  .journey__boogi img { height: 46px !important; }
+}
+
+/* 앱 설치 안내 */
+.install {
+  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  z-index: 60; display: flex; align-items: center; gap: 10px; width: min(460px, calc(100vw - 32px));
+  padding: 12px 14px; border-radius: 16px; background: rgba(23, 53, 95, 0.96); color: #fff;
+  box-shadow: 0 16px 36px -12px rgba(23, 53, 95, 0.7); animation: install-in 320ms var(--ease-spring-out) both;
+}
+.install img { width: 40px; height: 40px; border-radius: 10px; background: #fff; flex: none; }
+.install p { margin: 0; font-size: 13px; line-height: 1.45; flex: 1; }
+.install p b { display: block; font-size: 14px; }
+.install button { font: inherit; font-size: 13px; font-weight: 800; border: 0; border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+.install__go { background: #fde68a; color: #5b3b00; }
+.install__x { background: transparent; color: #c9d8f0; padding: 8px !important; }
+@keyframes install-in { from { opacity: 0; transform: translate(-50%, 12px); } }
+@media (prefers-reduced-motion: reduce) { .install { animation: none; } }

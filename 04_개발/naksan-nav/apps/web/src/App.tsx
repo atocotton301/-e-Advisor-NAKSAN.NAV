@@ -9,6 +9,7 @@ import { buildCatalog, loadCatalog } from "./data/curriculum";
 import { applyRequirementVersion, entryYearOf } from "./lib/requirements";
 import type { Admission, Catalog, Student, TrackRef } from "./types";
 import { AdmissionInfo } from "./components/AdmissionInfo";
+import { InstallPrompt } from "./components/InstallPrompt";
 import { COLLEGES } from "./data/majors";
 
 type Stage = "login" | "major" | "interest" | "loading" | "roadmap" | "info";
@@ -121,6 +122,7 @@ export function App() {
           {stage === "loading" && track1 && <LoadingScreen trackName={track1.track.name} />}
         </main>
       )}
+      <InstallPrompt />
     </div>
   );
 }
