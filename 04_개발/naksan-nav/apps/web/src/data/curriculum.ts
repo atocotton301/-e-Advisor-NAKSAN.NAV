@@ -1,6 +1,7 @@
 import { CUR_2026_2 } from "./cur2026_2";
 import type { Activity, Catalog, Category, Course, Family, Paper, Professor, Student, TrackRef } from "../types";
 import { AI_CURRICULUM, BOOK_2026_2, normName, tagsFor, type RealSection } from "./hansung";
+import { JS_COURSES, JS_MAJORS, type JsCourse, type JsListing, type JsSemester } from "./jongjeongsi";
 
 // ⚠ 데모용 샘플 데이터. 과목·교수·논문은 모두 가상이며, 실제 교육과정은 수강신청책자·교육과정표 기반 DB로 교체한다.
 
@@ -573,9 +574,136 @@ const realProfId = (sections?: RealSection[]) => {
   return name && name !== "강사" && name !== "미정" ? `real:${name}` : "";
 };
 
+// ---------- 종합정보시스템 개설 과목 (2026-1·2, crawler/jongjeongsi 로 수집) ----------
+
+type JsTermSection = RealSection & { term: 1 | 2 };
+
+interface Offer {
+  code: string;
+  course: JsCourse;
+  category: Category;
+  grade: number;
+  area?: string;
+  sections: JsTermSection[];
+}
+
+const JS_TERMS: [JsSemester, 1 | 2][] = [
+  ["2026-1", 1],
+  ["2026-2", 2],
+];
+
+/** majors.ts 와 종합정보시스템의 영역 이름을 맞춘다 (계약학과 표기 등). */
+const jsKey = (name: string) => normName(name.replace(/\(계약학과\)$/, ""));
+
+const JS_INDEX = JS_TERMS.map(([sem, term]) => ({
+  sem,
+  term,
+  majors: new Map(Object.entries(JS_MAJORS[sem]).map(([n, list]) => [jsKey(n), list])),
+}));
+
+/** 영역(트랙·학과·교양 영역)들의 1·2학기 개설 과목을 과목코드 하나로 모은다. */
+function jsOffers(areaNames: string[], keep: (listing: JsListing) => boolean = () => true): Offer[] {
+  const byCode = new Map<string, Offer>();
+  for (const { sem, term, majors } of JS_INDEX) {
+    for (const areaName of areaNames) {
+      for (const listing of majors.get(jsKey(areaName)) ?? []) {
+        if (!keep(listing)) continue;
+        const [code, category, grade, area] = listing;
+        const course = JS_COURSES[sem][code];
+        if (!course) continue;
+        let offer = byCode.get(code);
+        if (!offer) byCode.set(code, (offer = { code, course, category, grade, area, sections: [] }));
+        if (offer.sections.some((s) => s.term === term)) continue;
+        offer.sections.push(...course.sections.map(({ sec, prof, time, room }) => ({ sec, prof, time, room, term })));
+      }
+    }
+  }
+  return [...byCode.values()];
+}
+
+const termsOf = (sections: JsTermSection[]) => [...new Set(sections.map((s) => s.term))];
+
+/** 학기를 고르면 그 학기 분반만, 두 학기에 걸쳐 있으면 분반 이름 앞에 학기를 붙인다. */
+function sectionsFor(offer: Offer, term?: 1 | 2): JsTermSection[] {
+  const picked = term ? offer.sections.filter((s) => s.term === term) : [];
+  const list = picked.length ? picked : offer.sections;
+  return termsOf(list).length > 1 ? list.map((s) => ({ ...s, sec: `${s.term}학기 ${s.sec}` })) : list;
+}
+
+function jsCourse(offer: Offer, id: string, extra: Partial<Course>): Course {
+  const terms = termsOf(offer.sections);
+  const sections = sectionsFor(offer);
+  return {
+    id,
+    name: offer.course.name,
+    category: offer.category,
+    credits: offer.course.credits,
+    grade: offer.grade,
+    term: terms.length === 1 ? terms[0] : undefined,
+    tags: tagsFor(offer.course.name),
+    professorId: realProfId(sections),
+    source: "official",
+    code: offer.code,
+    sections,
+    ...extra,
+  };
+}
+
+/** 이 트랙(학과)의 실제 개설 전공 과목. 학년 구분 없는 과목(0)은 3학년 선택으로 둔다. */
+function jsMajorCourses(name: string, slot: 1 | 2): Course[] {
+  return jsOffers([name], ([, category]) => category.startsWith("전공")).map((o) =>
+    jsCourse(o, `js-${slot}-${o.code}`, { grade: o.grade || 3, trackSlot: slot }),
+  );
+}
+
+/** 종합정보시스템 교양 과목군 → 졸업요건의 선택필수교양 분야 */
+const AREA_OF: Record<string, string> = {
+  "예술과 체육": "예술과 스포츠",
+  인문학: "인문학적 상상력",
+  사회과학: "사회과학적 상상력",
+  "자연과학 및 정보기술": "과학기술 상상력",
+  융합교양: "융합적 상상력",
+};
+
+let jsElectivesCache: Course[] | null = null;
+
+/** 실제 선택필수교양(분야별)·일반교양·일반선택 과목. 유학생용 한국어 집중 과목군은 뺀다. */
+function jsLiberalElectives(): Course[] {
+  if (jsElectivesCache) return jsElectivesCache;
+  const areaCourses = jsOffers(["선택필수교양"])
+    .filter((o) => AREA_OF[o.area ?? ""])
+    .map((o) => jsCourse(o, `js-lib-${o.code}`, { category: "선택필수교양", grade: 0, group: AREA_OF[o.area!] }));
+  const inArea = new Set(areaCourses.map((c) => c.code));
+  const general = jsOffers(["일반교양", "일반선택"])
+    .filter((o) => !inArea.has(o.code))
+    .map((o) => jsCourse(o, `js-gen-${o.code}`, { category: "일반선택", grade: 0 }));
+  return (jsElectivesCache = [...areaCourses, ...general]);
+}
+
+let jsRequiredCache: Offer[] | null = null;
+const ROMAN_LEVEL = /\s*[ⅠⅡⅢⅣ]+$/;
+
 /**
- * 트랙 전공 과목. AI응용학과는 학과 공식 교육과정, 2026-2 책자에 있는 트랙은
- * 2학기 실제 개설 과목을 쓰고, 아직 자료가 없는 1학기는 샘플로 채운다.
+ * 필수교양은 학번별 요건 그룹이 붙은 목록을 그대로 쓰고 실제 분반만 붙인다.
+ * 영어처럼 Ⅰ~Ⅲ 단계로 나뉜 과목은 단계를 분반 이름 앞에 적는다.
+ */
+function withRealSections(c: Course): Course {
+  if (c.category !== "필수교양") return c;
+  const key = normName(c.name);
+  const matches = (jsRequiredCache ??= jsOffers(["교양필수"])).filter(
+    (o) => normName(o.course.name.replace(ROMAN_LEVEL, "")) === key,
+  );
+  if (!matches.length) return c;
+  const sections = matches.flatMap((o) => {
+    const level = o.course.name.match(ROMAN_LEVEL)?.[0].trim();
+    return sectionsFor(o, c.term).map((s) => (level ? { ...s, sec: `${level} ${s.sec}` } : s));
+  });
+  return { ...c, source: "official", code: matches[0]!.code, sections, professorId: realProfId(sections) || c.professorId };
+}
+
+/**
+ * 트랙 전공 과목. 종합정보시스템에 이 트랙의 2026-1·2 개설 과목이 있으면 그걸 쓰고,
+ * 없으면 2026-2 교육과정조회·책자, 그것도 없으면 샘플을 쓴다. AI응용학과는 학과 공식 교육과정에 실제 분반을 붙인다.
  */
 export function majorCourses(ref: TrackRef, slot: 1 | 2): Course[] {
   const name = ref.track.name;
@@ -585,23 +713,34 @@ export function majorCourses(ref: TrackRef, slot: 1 | 2): Course[] {
   const bookByName = new Map(book.map((b) => [normName(b.name), b]));
 
   if (name === "AI응용학과") {
+    const real = new Map(jsOffers([name]).map((o) => [normName(o.course.name), o]));
     return AI_CURRICULUM.map((r, i) => {
-      const b = r.term !== 1 ? bookByName.get(normName(r.name)) : undefined;
+      const term = r.term === 0 ? undefined : r.term;
+      const offer = real.get(normName(r.name));
+      const b = !offer && r.term !== 1 ? bookByName.get(normName(r.name)) : undefined;
+      const sections = offer ? sectionsFor(offer, term) : b?.sections;
       return {
         id: `ai-${slot}-${i}`,
         name: r.name,
         category: r.category,
-        credits: b?.credits ?? 3,
+        credits: offer?.course.credits ?? b?.credits ?? 3,
         grade: r.grade,
-        term: r.term === 0 ? undefined : r.term,
+        term,
         tags: tagsFor(r.name),
-        professorId: realProfId(b?.sections),
+        professorId: realProfId(sections),
         trackSlot: slot,
         source: "official" as const,
-        code: b?.code,
-        sections: b?.sections,
+        code: offer?.code ?? b?.code,
+        sections,
       };
     });
+  }
+
+  const js = jsMajorCourses(name, slot);
+  if (js.length) {
+    // 한 학기에만 자료가 있으면 나머지 학기는 샘플로 채운다.
+    const covered = new Set(js.flatMap((c) => (c.term ? [c.term] : [1, 2])));
+    return [...sample.filter((c) => !covered.has(c.term ?? 1)), ...js];
   }
   // 2026-2 교육과정조회(공식) — 2학기 전공은 이걸 기준으로, 분반·시간은 책자에서 붙인다.
   const cur = CUR_2026_2[name];
@@ -679,11 +818,15 @@ export function buildCatalog(student: Pick<Student, "track1" | "track2" | "entry
     courses.push(...majorCourses(student.track2, 2).filter((c) => !taken.has(normName(c.name))));
     families.add(fam2);
   }
-  courses.push(...(student.entryYear % 100 >= 24 ? LIBERAL_COURSES_24 : LIBERAL_COURSES_19_23));
+  // 필수교양은 학번별 요건 그룹이 붙은 목록에 실제 분반만 붙이고, 선택필수교양·일반선택은 실제 개설 과목으로 바꾼다.
+  const liberal = student.entryYear % 100 >= 24 ? LIBERAL_COURSES_24 : LIBERAL_COURSES_19_23;
+  const electives = jsLiberalElectives();
+  courses.push(...liberal.filter((c) => c.category === "필수교양" || !electives.length).map(withRealSections), ...electives);
 
   const professors: Record<string, Professor> = {};
   for (const p of [...[...families].flatMap(familyProfessors), ...LIBERAL_PROFS]) professors[p.id] = p;
-  const deptOf = (c: Course) => (c.trackSlot === 2 ? student.track2?.track.name : student.track1.track.name) ?? "";
+  const deptOf = (c: Course) =>
+    (c.trackSlot === 2 ? student.track2?.track.name : c.trackSlot === 1 ? student.track1.track.name : "교양") ?? "";
   for (const p of realProfessors(courses, deptOf)) professors[p.id] = p;
 
   return { courses, activities: ACTIVITIES, professors };

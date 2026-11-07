@@ -1640,6 +1640,115 @@ p {
   border-top: 1px solid var(--line);
 }
 
+/* 종합정보시스템 수업계획서 */
+.sec-pick {
+  min-width: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.sec-pick.is-on {
+  border-color: var(--blue-500);
+  background: var(--blue-500);
+  color: #fff;
+}
+.ts__table tr.is-picked td {
+  background: var(--blue-50);
+}
+/* 폰에서 교수 이름·분반이 한 글자씩 끊기지 않게, 넘치면 표만 가로로 스크롤 */
+.syllabus .ts__table {
+  overflow-x: auto;
+}
+.syllabus .ts__table td:nth-child(1),
+.syllabus .ts__table td:nth-child(2) {
+  white-space: nowrap;
+}
+.syllabus .ts__table td {
+  word-break: keep-all;
+}
+.syllabus__loading {
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--blue-50);
+  color: var(--ink-3) !important;
+  font-weight: 600;
+}
+.syllabus__real h3 small {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.syllabus__en {
+  margin: -2px 0 8px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ink-3) !important;
+}
+.syllabus__facts--plain {
+  background: none;
+  border: 1px solid var(--line);
+}
+.syllabus__facts--plain dd {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.syllabus .pre {
+  white-space: pre-line;
+}
+.syllabus .grading {
+  flex-wrap: wrap;
+}
+.grading span:nth-child(5) {
+  background: #2b3f63;
+}
+.grading span:nth-child(6) {
+  background: #48607f;
+}
+.outcomes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.outcomes li {
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--blue-50);
+  color: var(--ink-2);
+}
+.outcomes em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.weeks td .pre {
+  display: block;
+}
+.weeks__online {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.weeks__m {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--blue-100);
+  color: var(--blue-700);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 /* 교수 프로필 */
 .prof {
   display: grid;
