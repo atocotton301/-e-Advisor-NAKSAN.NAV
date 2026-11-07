@@ -892,6 +892,8 @@ p {
 
 /* 수업 리스트 패널 */
 .panel-slot {
+  /* 수업 리스트 + 이번 학기 시간표. Roadmap.tsx 의 패널 위치 계산도 이 값을 쓴다. */
+  --panel-w: min(1000px, 100%);
   position: relative;
   margin-top: 6px;
 }
@@ -909,7 +911,7 @@ p {
 }
 .panel-slot__inner {
   position: relative;
-  width: min(660px, 100%);
+  width: var(--panel-w);
   margin-top: 8px;
 }
 .panel-slot.is-leaving .course-panel,
@@ -1241,9 +1243,12 @@ p {
   font-size: 13px;
   font-weight: 600;
   padding: 9px 16px;
-  border-radius: 999px;
+  border-radius: 18px;
   box-shadow: var(--shadow-lg);
-  white-space: nowrap;
+  /* 한 줄로 두되, 좁은 화면에서 길면 패널 안에서 줄을 바꾼다 */
+  width: max-content;
+  max-width: calc(100% - 24px);
+  text-align: center;
   animation: fade-up 0.25s var(--ease-out) both;
 }
 
@@ -2961,14 +2966,290 @@ textarea {
     text-align: left;
   }
 }
-.tt-link {
-  display: inline-block;
-  margin-top: 4px;
-  font-size: 12px;
+
+/* ───────── 이번 학기 시간표: 수업 리스트에 늘 붙어 있다 (넓으면 옆, 좁으면 아래) ───────── */
+.course-panel {
+  container: cpanel / inline-size;
 }
-.tt-link__clash {
+.course-panel__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.course-panel__main {
+  min-width: 0;
+}
+.tt-dock {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line);
+  background: linear-gradient(180deg, #fbfdff, var(--blue-50));
+}
+@container cpanel (min-width: 760px) {
+  .course-panel__body {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 36%);
+  }
+  .tt-dock {
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+}
+.tt-dock__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  min-height: 30px;
+}
+.tt-dock__head b {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--blue-900);
+}
+.tt-dock__stat {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-3);
+}
+.tt-dock__clash {
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--rose);
+  background: var(--rose-bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.tt-dock__open {
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  padding: 4px 11px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--blue-600);
+}
+.tt-dock__open:hover {
+  border-color: var(--blue-300);
+  background: var(--blue-50);
+}
+.tt-dock__grid {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+.tt-dock__empty {
+  position: absolute;
+  inset: 22px 0 0 24px;
+  display: grid;
+  place-items: center;
+  padding: 0 16px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+.tt-dock__off {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.tt-dock__off > span {
+  font-weight: 800;
+}
+.tt-dock__off i {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--ink-2);
+  background: #fff;
+  border: 1px dashed var(--blue-300);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.tt-dock__off small {
+  margin-left: 4px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+/* 한 주 시간표 그리드 (WeekGrid) */
+.wk {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wk__head,
+.wk__body {
+  display: grid;
+  grid-template-columns: 20px repeat(5, minmax(0, 1fr));
+  gap: 3px;
+}
+.wk__head b {
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--blue-900);
+}
+.wk__body {
+  flex: 1 1 auto;
+  min-height: calc(var(--hours) * 24px);
+}
+.wk__times {
+  position: relative;
+}
+.wk__times span {
+  position: absolute;
+  right: 3px;
+  transform: translateY(-1px);
+  font-size: 9.5px;
+  line-height: 1;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.wk__col {
+  position: relative;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.wk__col i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed #e6edf6;
+}
+.wk__block {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  overflow: hidden;
+  border-radius: 6px;
+  border-left: 3px solid var(--tone-ink);
+  padding: 2px 3px 2px 4px;
+  background: var(--tone-bg);
+  color: var(--tone-ink);
+  font-size: 10px;
+  line-height: 1.2;
+  transform-origin: 50% 40%;
+  transition: top 0.25s var(--ease-out), height 0.25s var(--ease-out), left 0.25s var(--ease-out), width 0.25s var(--ease-out), box-shadow 0.15s;
+  animation: wk-pop 0.46s var(--ease-spring-out) var(--pop-delay, 0ms) both;
+}
+.wk__block b {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-weight: 800;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.wk__block small {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 9px;
+  opacity: 0.75;
+}
+/* 칸이 낮으면 글자가 반쯤 잘려 보이지 않게 강의실부터 숨기고, 더 낮으면 과목명을 한 줄로 */
+.wk__block {
+  container: wkb / size;
+}
+/* 기준은 칸 안쪽 높이: 과목명 두 줄 24px + 강의실 한 줄 11px */
+@container wkb (max-height: 35.9px) {
+  .wk__block small {
+    display: none;
+  }
+}
+@container wkb (max-height: 23.9px) {
+  .wk__block b {
+    -webkit-line-clamp: 1;
+  }
+}
+.wk__block.is-clash {
+  --tone-ink: var(--rose);
+  background: repeating-linear-gradient(135deg, #fde3e8 0 5px, #fff4f6 5px 10px);
+}
+.wk__block.is-focus {
+  z-index: 2;
+  box-shadow: 0 0 0 2px var(--tone-ink), 0 6px 14px -4px rgba(23, 53, 95, 0.4);
+}
+.wk__block.is-ghost {
+  z-index: 3;
+  border: 1.5px dashed var(--blue-500);
+  background: rgba(65, 120, 192, 0.12);
+  color: var(--blue-700);
+  animation: wk-ghost 0.16s ease-out both;
+}
+.wk__block.is-ghost.is-clash {
+  border-color: var(--rose);
+  background: rgba(217, 83, 106, 0.12);
   color: var(--rose);
 }
+@keyframes wk-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) translateY(-6px);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes wk-ghost {
+  from {
+    opacity: 0;
+  }
+}
+
+/* 과목 카드에서 시간표 칸으로 날아가는 이름표 */
+.wk-flyer {
+  position: fixed;
+  z-index: 90;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.wk-flyer__chip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1.5px solid var(--tone-ink);
+  background: var(--tone-bg);
+  color: var(--tone-ink);
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 12px 26px -10px rgba(23, 53, 95, 0.55);
+}
+
+/* 과목 색: 밝은 바탕 + 어두운 글자 */
+.wk-tone-0 { --tone-bg: #dfeafb; --tone-ink: #234f8c; }
+.wk-tone-1 { --tone-bg: #daf2e6; --tone-ink: #16694a; }
+.wk-tone-2 { --tone-bg: #fdecd0; --tone-ink: #8a4c06; }
+.wk-tone-3 { --tone-bg: #ebe3fb; --tone-ink: #5b35a5; }
+.wk-tone-4 { --tone-bg: #d6eff3; --tone-ink: #0d5d6c; }
+.wk-tone-5 { --tone-bg: #e9f2d2; --tone-ink: #4b650d; }
+.wk-tone-6 { --tone-bg: #f3e6da; --tone-ink: #7a4a22; }
+.wk-tone-7 { --tone-bg: #e4e8ef; --tone-ink: #33465f; }
+
 .syllabus__none {
   font-size: 14px;
   color: var(--ink-2);

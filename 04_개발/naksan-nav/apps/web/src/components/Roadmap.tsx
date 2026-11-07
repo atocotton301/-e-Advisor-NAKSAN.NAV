@@ -2,7 +2,17 @@ import type React from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { extraLedger, recognizedTotal } from "../lib/extracurricular";
 import { evaluate, isMet, REQ, requirementVersion } from "../lib/requirements";
-import type { TimetableEntry } from "../lib/timetable";
+import {
+  autoSectionIndex,
+  clashesWith,
+  overlaps,
+  placeCourses,
+  secLabel,
+  sectionEntries,
+  sectionsOf,
+  type SectionLike,
+  type TimetableEntry,
+} from "../lib/timetable";
 import { gpa, sampleTranscript, type Grade, type TranscriptRow } from "../lib/transcript";
 import type { Activity, Catalog, Course, SemesterPlan, Student, TrackRef } from "../types";
 import { Boogi } from "./Boogi";
@@ -13,7 +23,6 @@ import { MyPage } from "./MyPage";
 import { ActivityGuide, type ExternalEntry } from "./ActivityGuide";
 import { ActivityReviews } from "./ActivityReviews";
 import { DecisionCheck } from "./DecisionCheck";
-import { clashesWith, overlaps, secLabel, sectionEntries, sectionsOf } from "../lib/timetable";
 import { CREDIT, SEED_REVIEWS, type Review } from "../data/reviews";
 import { ProfessorView } from "./ProfessorView";
 import { RequirementsPanel } from "./RequirementsPanel";
@@ -36,6 +45,13 @@ const EXTEND_MS = 700;
 
 /** 타임라인에서 i번째 학기 노드의 가로 위치(%) */
 const nodeX = (i: number) => ((i + 0.5) / SEMESTERS.length) * 100;
+/** i번째 학기가 1학기인지 2학기인지 */
+const termOf = (i: number) => ((i % 2) + 1) as 1 | 2;
+/** 마지막 한글 글자에 받침이 있으면 앞 조사, 없으면 뒤 조사를 붙인다 (을/를, 은/는). */
+const withJosa = (word: string, batchim: string, plain: string) => {
+  const last = [...word].reverse().find((c) => c >= "가" && c <= "힣");
+  return word + (last && (last.charCodeAt(0) - 0xac00) % 28 > 0 ? batchim : plain);
+};
 
 type Phase = "idle" | "extending" | "moving";
 
@@ -91,7 +107,7 @@ export function Roadmap({ student, catalog, onReset, onChangeTrack2 }: RoadmapPr
     SEMESTERS.map((_, i) => {
       if (i < transfer.start) return { courseIds: i === transfer.start - 1 && transfer.recognized ? [transfer.recognized.id] : [], activityIds: [] };
       const grade = Math.floor(i / 2) + 1;
-      const term = (i % 2) + 1;
+      const term = termOf(i);
       const ids: string[] = [];
       let credits = 0;
       for (const c of catalog.courses) {
@@ -107,7 +123,11 @@ export function Roadmap({ student, catalog, onReset, onChangeTrack2 }: RoadmapPr
   const [current, setCurrent] = useState(transfer.start);
   /** 지금까지 열어 본 가장 먼 학기 */
   const [reached, setReached] = useState(transfer.start);
-  const [timetables, setTimetables] = useState<TimetableEntry[][]>(() => SEMESTERS.map(() => []));
+  // 기본으로 담아 둔 과목도 처음부터 시간이 안 겹치는 분반으로 시간표에 들어가 있다.
+  const [timetables, setTimetables] = useState<TimetableEntry[][]>(() => {
+    const byId = new Map(catalog.courses.map((c) => [c.id, c]));
+    return plans.map((p, i) => placeCourses(p.courseIds.flatMap((id) => byId.get(id) ?? []), termOf(i)));
+  });
   const [grades, setGrades] = useState<Record<string, Grade>>({});
   const [myPage, setMyPage] = useState<Opened | null>(null);
   const [timetableOpen, setTimetableOpen] = useState<Opened | null>(null);
@@ -180,6 +200,7 @@ export function Roadmap({ student, catalog, onReset, onChangeTrack2 }: RoadmapPr
   );
 
   const plan = plans[current]!;
+  const term = termOf(current);
   const semCourses = coursesOf(plan);
   const semCredits = semCourses.reduce((acc, c) => acc + c.credits, 0);
   const extSum = (i: number) => externals[i]!.reduce((acc, e) => acc + e.points, 0);
@@ -287,6 +308,26 @@ export function Roadmap({ student, catalog, onReset, onChangeTrack2 }: RoadmapPr
     return true;
   };
 
+  /**
+   * 분반 시간을 이번 학기 시간표에 넣는다. 직접 고른 분반은 늘 알려 주고,
+   * 담을 때 저절로 넣은 분반은 온라인이거나 어느 분반이든 겹칠 때만 알려 준다.
+   */
+  const placeSection = (course: Course, section: SectionLike, chosen: boolean) => {
+    const added = sectionEntries(course.name, section);
+    const clash = clashesWith(added, timetables[current]!.filter((e) => e.name !== course.name));
+    setSemesterTimetable((t) => [...t.filter((e) => e.name !== course.name), ...added]);
+    const who = `${course.name} ${secLabel(section)}반(${section.prof || "미정"})`;
+    if (!added.length)
+      flash(`${withJosa(who, "은", "는")} ${chosen ? "시간이 정해지지 않은 온라인 강좌예요." : "온라인 강좌라 시간표 칸 없이 담았어요."}`);
+    else if (clash.length)
+      flash(
+        chosen
+          ? `${withJosa(who, "을", "를")} 넣었어요. ${clash.join(", ")} 과목과 시간이 겹쳐요.`
+          : `${withJosa(course.name, "은", "는")} 모든 분반이 다른 과목과 시간이 겹쳐요.`,
+      );
+    else if (chosen) flash(`${withJosa(who, "을", "를")} 이번 학기 시간표에 넣었어요.`);
+  };
+
   const toggleCourse = (course: Course) => {
     if (plan.courseIds.includes(course.id)) {
       updatePlan((p) => ({ ...p, courseIds: p.courseIds.filter((id) => id !== course.id) }));
@@ -294,7 +335,14 @@ export function Roadmap({ student, catalog, onReset, onChangeTrack2 }: RoadmapPr
       setSemesterTimetable((t) => t.filter((e) => e.name !== course.name));
       return;
     }
-    addCourse(course);
+    if (!addCourse(course)) return;
+    // 담으면 이번 학기 분반 중 다른 과목과 안 겹치는 분반을 골라 바로 시간표에 넣는다.
+    // 시간표에 직접 적어 둔 과목이면 그대로 둔다.
+    const entries = timetables[current]!;
+    if (entries.some((e) => e.name === course.name)) return;
+    const sections = sectionsOf(course);
+    const index = autoSectionIndex(course.name, sections, term, entries);
+    if (index >= 0) placeSection(course, sections[index]!, false);
   };
 
   /** 수업 리스트에서 분반을 고르면 과목을 담고 이번 학기 시간표에 그 분반 시간을 넣는다. */
@@ -302,13 +350,7 @@ export function Roadmap({ student, catalog, onReset, onChangeTrack2 }: RoadmapPr
     const section = sectionsOf(course)[index];
     if (!section) return;
     if (!plan.courseIds.includes(course.id) && !addCourse(course)) return;
-    const added = sectionEntries(course.name, section);
-    const clash = clashesWith(added, timetables[current]!.filter((e) => e.name !== course.name));
-    setSemesterTimetable((t) => [...t.filter((e) => e.name !== course.name), ...added]);
-    const who = `${course.name} ${secLabel(section)}반(${section.prof || "미정"})`;
-    if (!added.length) flash(`${who}은 시간이 정해지지 않은 온라인 강좌예요.`);
-    else if (clash.length) flash(`${who}을 넣었어요. ${clash.join(", ")} 과목과 시간이 겹쳐요.`);
-    else flash(`${who}을 이번 학기 시간표에 넣었어요.`);
+    placeSection(course, section, true);
   };
 
   const toggleActivity = (id: string) => {
@@ -392,7 +434,8 @@ export function Roadmap({ student, catalog, onReset, onChangeTrack2 }: RoadmapPr
   };
 
   const boogiAt = phase === "extending" ? current + 1 : current;
-  const panelLeft = `clamp(0px, calc(${nodeX(current)}% - 46px), calc(100% - min(660px, 100%)))`;
+  // 패널 너비(--panel-w)는 styles.css 의 .panel-slot 에서 정한다.
+  const panelLeft = `clamp(0px, calc(${nodeX(current)}% - 46px), calc(100% - var(--panel-w)))`;
   const checklist = [
     { label: "필수교양(기초)", ok: isMet(status.liberalBasicTotal), fix: "교양 탭에서 필수교양을 담아요" },
     { label: "선택필수교양", ok: isMet(status.areaCount) && isMet(status.areaCredits), fix: "3개 분야 이상 7~9학점을 채워요" },
@@ -555,7 +598,7 @@ export function Roadmap({ student, catalog, onReset, onChangeTrack2 }: RoadmapPr
                 key={`${current}-${student.track2?.track.id ?? ""}`}
                 semesterLabel={SEMESTERS[current]!}
                 grade={Math.floor(current / 2) + 1}
-                term={((current % 2) + 1) as 1 | 2}
+                term={term}
                 isLast={current === SEMESTERS.length - 1}
                 revisiting={current < reached}
                 extra={ledger[current]!}
@@ -704,7 +747,7 @@ export function Roadmap({ student, catalog, onReset, onChangeTrack2 }: RoadmapPr
           {() => (
             <TimetableView
               semesterLabel={SEMESTERS[current]!}
-              term={((current % 2) + 1) as 1 | 2}
+              term={term}
               courseNames={semCourses.map((c) => c.name)}
               courses={semCourses}
               entries={timetables[current]!}

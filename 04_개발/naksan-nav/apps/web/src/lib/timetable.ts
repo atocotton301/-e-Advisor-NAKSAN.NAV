@@ -108,8 +108,13 @@ export interface SectionLike {
   term?: 1 | 2;
 }
 
-export const sectionsOf = (course: { sections?: { sec: string; prof: string; time: string; room: string }[] }) =>
-  (course.sections ?? []) as SectionLike[];
+/** 분반 정보를 가질 수 있는 과목 (Course 와 같은 모양) */
+interface HasSections {
+  name: string;
+  sections?: { sec: string; prof: string; time: string; room: string }[];
+}
+
+export const sectionsOf = (course: HasSections) => (course.sections ?? []) as SectionLike[];
 
 /** 한 학기 분반만 보여줄 때는 "1학기 A" 의 학기 표시를 뗀다. */
 export const secLabel = (s: SectionLike) => (s.term ? s.sec.replace(/^[12]학기 /, "") : s.sec);
@@ -157,7 +162,7 @@ export function placedSectionIndex(name: string, sections: SectionLike[], entrie
 }
 
 /** 넣으려는 칸과 시간이 겹치는 다른 과목 이름 */
-export function clashesWith(candidate: TimetableEntry[], others: TimetableEntry[]): string[] {
+export function clashesWith(candidate: Pick<TimetableEntry, "day" | "from" | "to">[], others: TimetableEntry[]): string[] {
   const names = new Set<string>();
   for (const a of candidate) {
     const ta = convert(a.day, a.from, a.to);
@@ -168,6 +173,31 @@ export function clashesWith(candidate: TimetableEntry[], others: TimetableEntry[
     }
   }
   return [...names];
+}
+
+/**
+ * 과목을 담을 때 저절로 넣을 분반: 다른 과목과 시간이 안 겹치는 대면 분반 → 온라인 분반 → 첫 분반.
+ * 이번 학기에 고를 분반이 없으면 -1.
+ */
+export function autoSectionIndex(name: string, sections: SectionLike[], term: 1 | 2 | undefined, entries: TimetableEntry[]): number {
+  const indexes = sectionIndexesFor(sections, term);
+  const others = entries.filter((e) => e.name !== name);
+  const timed = indexes.filter((i) => slotsOf(sections[i]!.time).length > 0);
+  const free = timed.find((i) => !clashesWith(slotsOf(sections[i]!.time), others).length);
+  if (free !== undefined) return free;
+  return indexes.find((i) => !timed.includes(i)) ?? indexes[0] ?? -1;
+}
+
+/** 과목들을 차례로 시간표에 넣는다. 이미 들어간 과목은 그대로 둔다. */
+export function placeCourses(courses: HasSections[], term: 1 | 2 | undefined, entries: TimetableEntry[] = []): TimetableEntry[] {
+  let out = entries;
+  for (const course of courses) {
+    if (out.some((e) => e.name === course.name)) continue;
+    const sections = sectionsOf(course);
+    const index = autoSectionIndex(course.name, sections, term, out);
+    if (index >= 0) out = [...out, ...sectionEntries(course.name, sections[index]!)];
+  }
+  return out;
 }
 
 /** 같은 요일에 시간이 겹치는 항목 id 쌍 */
