@@ -40,3 +40,12 @@ npx vite build
 - 성적표 캡처 OCR: 데모는 예시 결과. 실제는 팀 서버 OCR → 이후 종합정보시스템 연동(학교 협의)
 - AI 취업 분석: 지금은 규칙 기반. 실제는 서버에서 채용공고·NCS와 비교 (API 키는 서버에만)
 - 대학원·평생교육 로드맵, 동일교과목 조회
+
+## 안드로이드 앱 (APK)
+
+main에 웹앱 변경이 올라가면 GitHub Actions가 Capacitor로 APK를 자동 빌드합니다.
+
+- 받는 곳: 저장소 Releases의 `android-latest` → `NAKSAN-NAV.apk`
+- 설치: 갤럭시폰·갤럭시탭에서 파일을 열고 "출처를 알 수 없는 앱 설치"를 허용
+- `mobile/test.keystore`는 테스트용 공개 서명 키입니다(비밀번호 android). 스토어 배포에는 쓰지 않습니다.
+- 로컬 빌드: `npm run build:app && npx cap add android && npx cap sync android` 후 Android Studio로 열기
