@@ -1,9 +1,26 @@
 import { useMemo, useState } from "react";
 import type { Course } from "../types";
-import { convert, DAYS, overlaps, parseSlots, SLOT_CODES, toMin, type Day, type TimetableEntry } from "../lib/timetable";
+import {
+  convert,
+  DAYS,
+  newEntryId,
+  overlaps,
+  parseSlots,
+  placedSectionIndex,
+  secLabel,
+  sectionEntries,
+  sectionIndexesFor,
+  sectionsOf,
+  SLOT_CODES,
+  toMin,
+  type Day,
+  type TimetableEntry,
+} from "../lib/timetable";
 
 interface TimetableViewProps {
   semesterLabel: string;
+  /** 1학기 또는 2학기 — 그 학기에 열리는 분반만 고를 수 있게 한다 */
+  term?: 1 | 2;
   /** 이번 학기에 담은 과목 이름 (입력 편의용) */
   courseNames: string[];
   /** 이번 학기에 담은 과목 (분반 정보가 있으면 자동 채우기) */
@@ -18,21 +35,24 @@ const START = toMin("09:00");
 const END = toMin("22:30");
 const HOURS = Array.from({ length: 14 }, (_, i) => 9 + i);
 
-let seq = 0;
-const newId = () => `tt-${Date.now().toString(36)}-${seq++}`;
-
-export function TimetableView({ semesterLabel, courseNames, courses, entries, onChange, onOpenCapture }: TimetableViewProps) {
-  const withSections = courses.filter((c) => c.sections?.length);
-  const [picked, setPicked] = useState<Record<string, number>>({});
+export function TimetableView({ semesterLabel, term, courseNames, courses, entries, onChange, onOpenCapture }: TimetableViewProps) {
+  const withSections = courses.filter((c) => sectionIndexesFor(sectionsOf(c), term).length);
+  // 수업 리스트에서 이미 고른 분반이 있으면 그 분반을 기본으로 보여준다.
+  const [picked, setPicked] = useState<Record<string, number>>(() =>
+    Object.fromEntries(
+      withSections.map((c) => {
+        const sections = sectionsOf(c);
+        const placedAt = placedSectionIndex(c.name, sections, entries);
+        return [c.id, placedAt >= 0 ? placedAt : sectionIndexesFor(sections, term)[0]!];
+      }),
+    ),
+  );
   const placed = (name: string) => entries.some((e) => e.name === name);
   const placeSection = (c: Course) => {
-    const s = c.sections![picked[c.id] ?? 0]!;
-    const { items } = parseSlots(s.time.replace(/\//g, " "));
-    if (!items.length) return setError(`${c.name} ${s.sec}반 시간(${s.time})을 읽지 못했어요. 직접 입력해 주세요.`);
-    onChange([
-      ...entries.filter((e) => e.name !== c.name),
-      ...items.map((it) => ({ id: newId(), name: c.name, room: s.room, ...it })),
-    ]);
+    const s = sectionsOf(c)[picked[c.id] ?? sectionIndexesFor(sectionsOf(c), term)[0]!]!;
+    const added = sectionEntries(c.name, s);
+    if (!added.length) return setError(`${c.name} ${secLabel(s)}반 시간(${s.time || "온라인 강좌"})을 읽지 못했어요. 직접 입력해 주세요.`);
+    onChange([...entries.filter((e) => e.name !== c.name), ...added]);
     setError(null);
   };
   const [name, setName] = useState(courseNames[0] ?? "");
@@ -53,7 +73,7 @@ export function TimetableView({ semesterLabel, courseNames, courses, entries, on
       return setError(`교시 표기를 읽지 못했어요: ${parsed.errors.join(", ") || "예) 월2M~3M 수2M~3M"}`);
     onChange([
       ...entries,
-      ...parsed.items.map((it) => ({ id: newId(), name: name.trim(), room: room.trim() || undefined, ...it })),
+      ...parsed.items.map((it) => ({ id: newEntryId(), name: name.trim(), room: room.trim() || undefined, ...it })),
     ]);
     setCode("");
     setRoom("");
@@ -62,11 +82,11 @@ export function TimetableView({ semesterLabel, courseNames, courses, entries, on
 
   const loadExample = () =>
     onChange([
-      { id: newId(), name: "파이썬프로그래밍", day: "월", from: "2M", to: "3M", room: "상상관 501" },
-      { id: newId(), name: "파이썬프로그래밍", day: "수", from: "2M", to: "3M", room: "상상관 501" },
-      { id: newId(), name: "사고와표현", day: "화", from: "3", to: "4", room: "진리관 201" },
-      { id: newId(), name: "선형대수", day: "목", from: "5M", to: "6M", room: "공학관 304" },
-      { id: newId(), name: "영어 청취/회화", day: "금", from: "1", to: "2", room: "탐구관 105" },
+      { id: newEntryId(), name: "파이썬프로그래밍", day: "월", from: "2M", to: "3M", room: "상상관 501" },
+      { id: newEntryId(), name: "파이썬프로그래밍", day: "수", from: "2M", to: "3M", room: "상상관 501" },
+      { id: newEntryId(), name: "사고와표현", day: "화", from: "3", to: "4", room: "진리관 201" },
+      { id: newEntryId(), name: "선형대수", day: "목", from: "5M", to: "6M", room: "공학관 304" },
+      { id: newEntryId(), name: "영어 청취/회화", day: "금", from: "1", to: "2", room: "탐구관 105" },
     ]);
 
   return (
@@ -86,7 +106,7 @@ export function TimetableView({ semesterLabel, courseNames, courses, entries, on
 
       {withSections.length > 0 && (
         <section className="tt__sections">
-          <h3>담은 과목 분반 고르기 · 2026-2 강의시간표 기준</h3>
+          <h3>담은 과목 분반 고르기 · 종합정보시스템 2026-{term ?? 2}학기 시간표 기준</h3>
           <ul>
             {withSections.map((c) => (
               <li key={c.id}>
@@ -97,11 +117,14 @@ export function TimetableView({ semesterLabel, courseNames, courses, entries, on
                   value={picked[c.id] ?? 0}
                   onChange={(e) => setPicked((p) => ({ ...p, [c.id]: Number(e.target.value) }))}
                 >
-                  {c.sections!.map((s, i) => (
-                    <option key={s.sec + s.time} value={i}>
-                      {s.sec}반 · {s.time} · {s.prof || "미정"} · {s.room}
-                    </option>
-                  ))}
+                  {sectionIndexesFor(sectionsOf(c), term).map((i) => {
+                    const s = sectionsOf(c)[i]!;
+                    return (
+                      <option key={i} value={i}>
+                        {secLabel(s)}반 · {s.time || "온라인 강좌"} · {s.prof || "미정"} · {s.room}
+                      </option>
+                    );
+                  })}
                 </select>
                 <button type="button" className="btn btn--sm btn--ghost" onClick={() => placeSection(c)}>
                   {placed(c.name) ? "다시 넣기" : "시간표에 넣기"}

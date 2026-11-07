@@ -13,7 +13,7 @@ import { MyPage } from "./MyPage";
 import { ActivityGuide, type ExternalEntry } from "./ActivityGuide";
 import { ActivityReviews } from "./ActivityReviews";
 import { DecisionCheck } from "./DecisionCheck";
-import { overlaps } from "../lib/timetable";
+import { clashesWith, overlaps, secLabel, sectionEntries, sectionsOf } from "../lib/timetable";
 import { CREDIT, SEED_REVIEWS, type Review } from "../data/reviews";
 import { ProfessorView } from "./ProfessorView";
 import { RequirementsPanel } from "./RequirementsPanel";
@@ -272,18 +272,43 @@ export function Roadmap({ student, catalog, onReset, onChangeTrack2 }: RoadmapPr
     toastTimer.current = window.setTimeout(() => setToast(null), 2200);
   };
 
-  const toggleCourse = (course: Course) => {
-    if (plan.courseIds.includes(course.id)) {
-      updatePlan((p) => ({ ...p, courseIds: p.courseIds.filter((id) => id !== course.id) }));
-      return;
-    }
+  const setSemesterTimetable = (fn: (entries: TimetableEntry[]) => TimetableEntry[]) =>
+    setTimetables((prev) => prev.map((t, i) => (i === current ? fn(t) : t)));
+
+  /** 학점 한도 안이면 과목을 담고 true */
+  const addCourse = (course: Course) => {
     const lim = limits[current]!;
     if (semCredits + course.credits > lim.limit) {
       setShake((n) => n + 1);
       flash(`이번 학기는 최대 ${lim.limit}학점이에요 (${lim.reason}).`);
-      return;
+      return false;
     }
     updatePlan((p) => ({ ...p, courseIds: [...p.courseIds, course.id] }));
+    return true;
+  };
+
+  const toggleCourse = (course: Course) => {
+    if (plan.courseIds.includes(course.id)) {
+      updatePlan((p) => ({ ...p, courseIds: p.courseIds.filter((id) => id !== course.id) }));
+      // 뺀 과목은 이번 학기 시간표에서도 뺀다.
+      setSemesterTimetable((t) => t.filter((e) => e.name !== course.name));
+      return;
+    }
+    addCourse(course);
+  };
+
+  /** 수업 리스트에서 분반을 고르면 과목을 담고 이번 학기 시간표에 그 분반 시간을 넣는다. */
+  const pickSection = (course: Course, index: number) => {
+    const section = sectionsOf(course)[index];
+    if (!section) return;
+    if (!plan.courseIds.includes(course.id) && !addCourse(course)) return;
+    const added = sectionEntries(course.name, section);
+    const clash = clashesWith(added, timetables[current]!.filter((e) => e.name !== course.name));
+    setSemesterTimetable((t) => [...t.filter((e) => e.name !== course.name), ...added]);
+    const who = `${course.name} ${secLabel(section)}반(${section.prof || "미정"})`;
+    if (!added.length) flash(`${who}은 시간이 정해지지 않은 온라인 강좌예요.`);
+    else if (clash.length) flash(`${who}을 넣었어요. ${clash.join(", ")} 과목과 시간이 겹쳐요.`);
+    else flash(`${who}을 이번 학기 시간표에 넣었어요.`);
   };
 
   const toggleActivity = (id: string) => {
@@ -546,6 +571,9 @@ export function Roadmap({ student, catalog, onReset, onChangeTrack2 }: RoadmapPr
                 toast={toast}
                 busy={phase !== "idle"}
                 onToggleCourse={toggleCourse}
+                timetable={timetables[current]!}
+                onPickSection={pickSection}
+                onOpenTimetable={(origin) => setTimetableOpen({ origin })}
                 onToggleActivity={toggleActivity}
                 onOpenSyllabus={(course, origin) => setSyllabus({ course, origin })}
                 onOpenReviews={(activity, origin) => setReviewOpen({ activity, origin })}
@@ -676,6 +704,7 @@ export function Roadmap({ student, catalog, onReset, onChangeTrack2 }: RoadmapPr
           {() => (
             <TimetableView
               semesterLabel={SEMESTERS[current]!}
+              term={((current % 2) + 1) as 1 | 2}
               courseNames={semCourses.map((c) => c.name)}
               courses={semCourses}
               entries={timetables[current]!}

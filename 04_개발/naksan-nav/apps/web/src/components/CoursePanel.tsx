@@ -4,6 +4,18 @@ import { useMemo, useState, type MouseEvent } from "react";
 import { rankByInterest, type Recommendation } from "../lib/recommend";
 import { EXTRA_RULE, type ExtraRow } from "../lib/extracurricular";
 import { REQ } from "../lib/requirements";
+import {
+  clashesWith,
+  describeSlots,
+  overlaps,
+  placedSectionIndex,
+  sectionEntries,
+  secLabel,
+  sectionIndexesFor,
+  sectionsOf,
+  type SectionLike,
+  type TimetableEntry,
+} from "../lib/timetable";
 import type { Activity, Category, Course, SemesterPlan } from "../types";
 
 type Tab = "major" | "liberal" | "general" | "extra";
@@ -45,6 +57,10 @@ interface CoursePanelProps {
   toast: string | null;
   busy: boolean;
   onToggleCourse: (course: Course) => void;
+  /** 이번 학기 시간표. 분반을 고르면 여기에 들어간다. */
+  timetable: TimetableEntry[];
+  onPickSection: (course: Course, index: number) => void;
+  onOpenTimetable: (origin: DOMRect) => void;
   onToggleActivity: (id: string) => void;
   onOpenSyllabus: (course: Course, origin: DOMRect) => void;
   onOpenReviews: (activity: Activity, origin: DOMRect) => void;
@@ -102,6 +118,8 @@ export function CoursePanel(props: CoursePanelProps) {
 
   const lim = props.limit;
   const over = credits > lim.base;
+  const placedCount = new Set(props.timetable.map((e) => e.name)).size;
+  const clashCount = overlaps(props.timetable).size;
   const fill = Math.min(credits / Math.max(lim.limit, REQ.maxCreditsPerSemester), 1) * 100;
 
   return (
@@ -142,7 +160,10 @@ export function CoursePanel(props: CoursePanelProps) {
                     rec={ranks.get(c.id)}
                     selected={plan.courseIds.includes(c.id)}
                     showTrack={props.hasTrack2}
+                    term={term}
+                    timetable={props.timetable}
                     onToggle={() => props.onToggleCourse(c)}
+                    onPickSection={(i) => props.onPickSection(c, i)}
                     onOpen={(e) => props.onOpenSyllabus(c, e.currentTarget.getBoundingClientRect())}
                   />
                 ))}
@@ -172,6 +193,11 @@ export function CoursePanel(props: CoursePanelProps) {
             {props.semesterLabel} 학기 · 최대 <b className={lim.honor || lim.carry ? "meter__plus" : lim.warning ? "meter__warn" : ""}>{lim.limit}학점</b>
             <small> · {lim.reason}</small>
           </p>
+          <button type="button" className="link-btn tt-link" onClick={(e) => props.onOpenTimetable(e.currentTarget.getBoundingClientRect())}>
+            🗓 이번 학기 시간표 보기
+            {placedCount > 0 && ` · ${placedCount}과목`}
+            {clashCount > 0 && <b className="tt-link__clash"> · 시간 겹침 있음</b>}
+          </button>
         </div>
         <button
           type="button"
@@ -194,13 +220,21 @@ interface CourseRowProps {
   rec?: Recommendation;
   selected: boolean;
   showTrack: boolean;
+  term: 1 | 2;
+  timetable: TimetableEntry[];
   onToggle: () => void;
+  onPickSection: (index: number) => void;
   onOpen: (e: MouseEvent<HTMLButtonElement>) => void;
 }
 
-function CourseRow({ course, rec, selected, showTrack, onToggle, onOpen, index = 0 }: CourseRowProps) {
+function CourseRow({ course, rec, selected, showTrack, term, timetable, onToggle, onPickSection, onOpen, index = 0 }: CourseRowProps) {
+  const sections = sectionsOf(course);
+  const indexes = sectionIndexesFor(sections, term);
   return (
-    <div className={`course-row ${selected ? "is-selected" : ""} ${rec?.gold ? "is-gold" : ""}`} style={{ "--i": Math.min(index, 12) } as React.CSSProperties}>
+    <div
+      className={`course-row ${indexes.length ? "has-secs" : ""} ${selected ? "is-selected" : ""} ${rec?.gold ? "is-gold" : ""}`}
+      style={{ "--i": Math.min(index, 12) } as React.CSSProperties}
+    >
       <button type="button" className="course-row__main" aria-pressed={selected} onClick={onToggle}>
         <span className="check" aria-hidden>
           {selected ? "✓" : ""}
@@ -218,12 +252,6 @@ function CourseRow({ course, rec, selected, showTrack, onToggle, onOpen, index =
               <span className="src src--real">{course.source === "official" ? "공식 교육과정" : "2026-2 개설"}</span>
             )}
             {course.source === "sample" && <span className="src">샘플</span>}
-            {course.sections?.[0] && (
-              <span className="sec-line">
-                {course.sections.length}개 분반 ·{" "}
-                {[...new Set(course.sections.map((x) => x.prof.split(/\s+/)[0] || "미정"))].join(", ")}
-              </span>
-            )}
             {rec && <span className="matched">{rec.matched.map((t) => `#${t}`).join(" ")}</span>}
           </span>
         </span>
@@ -232,6 +260,82 @@ function CourseRow({ course, rec, selected, showTrack, onToggle, onOpen, index =
       <button type="button" className="syllabus-btn" onClick={onOpen}>
         계획서
       </button>
+      {indexes.length > 0 && (
+        <SectionBar name={course.name} sections={sections} indexes={indexes} timetable={timetable} onPick={onPickSection} />
+      )}
+    </div>
+  );
+}
+
+const profOf = (s: SectionLike) => s.prof || "미정";
+
+interface SectionBarProps {
+  name: string;
+  sections: SectionLike[];
+  /** 이번 학기에 열리는 분반의 인덱스 */
+  indexes: number[];
+  timetable: TimetableEntry[];
+  onPick: (index: number) => void;
+}
+
+/** 분반 요약 한 줄. 펼치면 교수별로 거르고 시간·강의실·시간 겹침을 보며 분반을 고른다. */
+function SectionBar({ name, sections, indexes, timetable, onPick }: SectionBarProps) {
+  const [open, setOpen] = useState(false);
+  const [prof, setProf] = useState<string | null>(null);
+  const picked = placedSectionIndex(name, sections, timetable);
+  const current = picked >= 0 ? sections[picked] : undefined;
+  const profs = [...new Set(indexes.map((i) => profOf(sections[i]!)))];
+  const others = timetable.filter((e) => e.name !== name);
+  const shown = prof ? indexes.filter((i) => profOf(sections[i]!) === prof) : indexes;
+
+  return (
+    <div className="sec-bar">
+      <button type="button" className="sec-bar__toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        {current ? (
+          <span>
+            <b>✓ {secLabel(current)}반</b> {profOf(current)} · {describeSlots(current.time) || "온라인 강좌"}
+          </span>
+        ) : (
+          <span>
+            분반 {indexes.length}개 · {profs.slice(0, 2).join(", ")}
+            {profs.length > 2 && ` 외 ${profs.length - 2}명`}
+          </span>
+        )}
+        <span className="sec-bar__hint">{open ? "접기 ▴" : current ? "바꾸기 ▾" : "교수·시간 보고 고르기 ▾"}</span>
+      </button>
+      {open && (
+        <div className="sec-picker">
+          {profs.length > 1 && (
+            <div className="sec-picker__profs" role="group" aria-label="교수로 거르기">
+              <button type="button" className={prof ? "" : "is-on"} aria-pressed={!prof} onClick={() => setProf(null)}>
+                전체 <small>{indexes.length}</small>
+              </button>
+              {profs.map((p) => (
+                <button key={p} type="button" className={prof === p ? "is-on" : ""} aria-pressed={prof === p} onClick={() => setProf(p)}>
+                  {p} <small>{indexes.filter((i) => profOf(sections[i]!) === p).length}</small>
+                </button>
+              ))}
+            </div>
+          )}
+          <ul className="sec-picker__list">
+            {shown.map((i) => {
+              const s = sections[i]!;
+              const clash = clashesWith(sectionEntries(name, s), others);
+              return (
+                <li key={i}>
+                  <button type="button" className={`sec-opt ${i === picked ? "is-on" : ""}`} aria-pressed={i === picked} onClick={() => onPick(i)}>
+                    <b className="sec-opt__sec">{secLabel(s)}</b>
+                    <span className="sec-opt__prof">{profOf(s)}</span>
+                    <span className="sec-opt__time">{describeSlots(s.time) || "온라인 강좌"}</span>
+                    <span className="sec-opt__room">{s.room}</span>
+                    {clash.length > 0 && <em className="sec-opt__clash">겹침 · {clash.join(", ")}</em>}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

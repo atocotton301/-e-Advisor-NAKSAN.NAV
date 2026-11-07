@@ -96,6 +96,80 @@ export function parseSlots(text: string): { items: { day: Day; from: string; to:
   return { items, errors };
 }
 
+// ---------- 분반 → 시간표 ----------
+
+/** 과목 분반. 종합정보시스템 분반은 몇 학기 개설인지(term)를 함께 갖고 있다. */
+export interface SectionLike {
+  sec: string;
+  prof: string;
+  /** 요일·교시 (예: 월2M~3M,수2M~3M). 온라인 강좌는 비어 있다. */
+  time: string;
+  room: string;
+  term?: 1 | 2;
+}
+
+export const sectionsOf = (course: { sections?: { sec: string; prof: string; time: string; room: string }[] }) =>
+  (course.sections ?? []) as SectionLike[];
+
+/** 한 학기 분반만 보여줄 때는 "1학기 A" 의 학기 표시를 뗀다. */
+export const secLabel = (s: SectionLike) => (s.term ? s.sec.replace(/^[12]학기 /, "") : s.sec);
+
+/** 이번 학기(1·2학기)에 열리는 분반의 원래 인덱스. 학기 정보가 없는 분반이면 전부. */
+export function sectionIndexesFor(sections: SectionLike[], term?: 1 | 2): number[] {
+  const all = sections.map((_, i) => i);
+  if (!term || !sections.some((s) => s.term)) return all;
+  const inTerm = all.filter((i) => sections[i]!.term === term);
+  return inTerm.length ? inTerm : all;
+}
+
+let seq = 0;
+export const newEntryId = () => `tt-${Date.now().toString(36)}-${seq++}`;
+
+const slotsOf = (time: string) => parseSlots(time.replace(/\//g, " ")).items;
+
+/** 분반 시간을 시간표 칸으로 바꾼다. 읽을 수 없는(온라인) 분반은 빈 배열. */
+export function sectionEntries(name: string, section: SectionLike): TimetableEntry[] {
+  return slotsOf(section.time).map((it) => ({ id: newEntryId(), name, room: section.room || undefined, ...it }));
+}
+
+/** "월2M~3M,수2M~3M" → "월 10:30–11:45 · 수 10:30–11:45" */
+export function describeSlots(time: string): string {
+  return slotsOf(time)
+    .map((it) => {
+      const t = convert(it.day, it.from, it.to)!;
+      return `${it.day} ${t.start}–${t.end}`;
+    })
+    .join(" · ");
+}
+
+const slotKey = (e: { day: string; from: string; to: string }) => `${e.day}${e.from}-${e.to}`;
+
+/** 시간표에 이 과목이 들어간 분반 (칸이 모두 맞는 분반의 인덱스, 없으면 -1) */
+export function placedSectionIndex(name: string, sections: SectionLike[], entries: TimetableEntry[]): number {
+  const mine = entries.filter((e) => e.name === name);
+  if (!mine.length) return -1;
+  const placed = new Set(mine.map(slotKey));
+  const room = mine[0]!.room;
+  return sections.findIndex((s) => {
+    const items = slotsOf(s.time);
+    return items.length === placed.size && items.every((it) => placed.has(slotKey(it))) && (!room || room === s.room);
+  });
+}
+
+/** 넣으려는 칸과 시간이 겹치는 다른 과목 이름 */
+export function clashesWith(candidate: TimetableEntry[], others: TimetableEntry[]): string[] {
+  const names = new Set<string>();
+  for (const a of candidate) {
+    const ta = convert(a.day, a.from, a.to);
+    if (!ta) continue;
+    for (const b of others) {
+      const tb = b.day === a.day ? convert(b.day, b.from, b.to) : null;
+      if (tb && toMin(ta.start) < toMin(tb.end) && toMin(tb.start) < toMin(ta.end)) names.add(b.name);
+    }
+  }
+  return [...names];
+}
+
 /** 같은 요일에 시간이 겹치는 항목 id 쌍 */
 export function overlaps(entries: TimetableEntry[]): Set<string> {
   const out = new Set<string>();
